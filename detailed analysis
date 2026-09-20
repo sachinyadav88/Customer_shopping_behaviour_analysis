@@ -1,0 +1,446 @@
+# Customer Shopping Behavior — Data Analyst / Business Analyst Project
+### Full analysis for PowerPoint portfolio presentation
+
+---
+
+## PART 1 — DATASET UNDERSTANDING
+
+**Dataset:** `customer_shopping_behavior.csv`
+**Rows:** 3,900 | **Columns:** 18 | **Grain:** one row = one customer / one transaction (Customer ID is unique per row, so this reads as one snapshot transaction per customer, not a full purchase history)
+
+| # | Column | Data Type | Category |
+|---|--------|-----------|----------|
+| 1 | Customer ID | Integer | Identifier (unique, 1–3900) |
+| 2 | Age | Integer | Numerical |
+| 3 | Gender | Text | Categorical (2 values) |
+| 4 | Item Purchased | Text | Categorical (25 values) |
+| 5 | Category | Text | Categorical (4 values) |
+| 6 | Purchase Amount (USD) | Integer | Numerical |
+| 7 | Location | Text | Categorical (50 US states) |
+| 8 | Size | Text | Categorical (4 values) |
+| 9 | Color | Text | Categorical (25 values) |
+| 10 | Season | Text | Categorical (4 values) |
+| 11 | Review Rating | Float | Numerical |
+| 12 | Subscription Status | Text | Categorical (2 values) |
+| 13 | Shipping Type | Text | Categorical (6 values) |
+| 14 | Discount Applied | Text | Categorical (2 values) |
+| 15 | Promo Code Used | Text | Categorical (2 values) |
+| 16 | Previous Purchases | Integer | Numerical |
+| 17 | Payment Method | Text | Categorical (6 values) |
+| 18 | Frequency of Purchases | Text | Categorical (7 values) |
+
+**Numerical columns:** Age, Purchase Amount (USD), Review Rating, Previous Purchases
+**Categorical columns:** Gender, Item Purchased, Category, Location, Size, Color, Season, Subscription Status, Shipping Type, Discount Applied, Promo Code Used, Payment Method, Frequency of Purchases
+**Date/time columns:** None. **There is no transaction date, order date, or timestamp field in this dataset.** "Season" and "Frequency of Purchases" are self-reported labels, not a time series.
+**Identifier:** Customer ID (unique for all 3,900 rows — no repeat customers in the data)
+
+**Missing values:** Only `Review Rating` has missing values — 37 out of 3,900 (0.95%). All other 17 columns are 100% complete. Notably, all 37 missing ratings belong to **male** customers.
+
+**Duplicate records:** 0 duplicate rows and 0 duplicate Customer IDs — the dataset is clean on this dimension.
+
+**Data quality issue found:** `Discount Applied` and `Promo Code Used` are **perfectly correlated** (100% match — every "Yes" in one is a "Yes" in the other, every "No" is a "No"). This means the two columns carry identical information and should be treated as one signal, not two independent variables.
+
+**Key relationship discovered:** `Gender` is perfectly split against `Subscription Status` and `Discount Applied` — **0 of 1,248 female customers** have "Yes" for either field, while **39.7% of male customers** have an active subscription and **63.2%** have used a discount/promo code. This is explored fully in Part 9.
+
+### What does this dataset represent?
+A single-snapshot record of 3,900 individual retail purchase transactions, each tied to a unique customer, capturing demographics (age, gender, location), what was bought (item, category, size, color, season), how it was bought (payment method, shipping type, discount/promo use), and the customer's engagement profile (subscription status, previous purchase count, purchase frequency, review rating given).
+
+### What business/domain does it appear to belong to?
+An **apparel and lifestyle e-commerce/retail business** (categories: Clothing, Footwear, Outerwear, Accessories), most likely US-based given the state-level location data and USD currency.
+
+---
+
+## PART 2 — BUSINESS CONTEXT
+
+- **Business activities reflected in the data:** product sales across four categories, customer subscription program enrollment, discount/promo code usage, multiple shipping and payment options, and post-purchase customer review ratings.
+- **Decisions a business could make using this data:** which categories/items to promote, which discount strategy to pursue, whether the subscription program is reaching the right audience, which shipping/payment options to prioritize operationally, and how customer profile (age, gender, location) relates to spending.
+- **Who benefits from this analysis:**
+  - **Marketing team** — discount/promo targeting, subscription growth strategy
+  - **Merchandising/Product team** — category and item performance
+  - **Operations team** — shipping method and payment method distribution
+  - **Customer Experience team** — review ratings by category
+  - **Senior Management** — overall revenue and customer profile summary
+
+---
+
+## PART 3 — PROBLEM STATEMENT
+
+**Problem Statement**
+
+The business has transaction-level data for 3,900 customers but no consolidated view of how customer demographics, product categories, and promotional activity relate to purchasing behavior. In particular, the business does not know whether its subscription program and discount strategy are reaching customers evenly, or whether spending and satisfaction vary meaningfully across customer segments. Without this analysis, marketing and merchandising decisions are being made without a clear, data-backed understanding of who is buying, what they are buying, and how promotions and subscriptions are distributed across the customer base. This analysis uses the available transaction data to close that gap and surface actionable, evidence-based patterns.
+
+---
+
+## PART 4 — OBJECTIVES OF THE ANALYSIS
+
+1. Establish a clean, quality-checked view of the customer and transaction data.
+2. Profile the customer base by demographics (age, gender, location).
+3. Evaluate product and category performance by revenue, volume, and rating.
+4. Assess how subscription status and discount/promo usage are distributed across the customer base.
+5. Compare purchasing behavior (spend, ratings) across genders, seasons, and age groups.
+6. Identify which operational choices (shipping type, payment method) are most used by customers.
+7. Translate findings into concrete, data-supported recommendations for marketing and merchandising.
+
+---
+
+## PART 5 — BUSINESS QUESTIONS
+
+| Category | Business Question | Why It Matters | Required Columns | Analysis/KPI |
+|---|---|---|---|---|
+| Customers/Demographics | What is the age and gender profile of our customers? | Guides targeting and messaging | Age, Gender | Distribution, average age |
+| Customer Behavior | Is the subscription program reaching all customer segments equally? | Reveals gaps in program reach | Gender, Subscription Status | % subscribed by segment |
+| Marketing/Promotions | Is discount/promo code usage evenly distributed across customers? | Informs promo targeting strategy | Gender, Discount Applied, Promo Code Used | % using discount by segment |
+| Products/Category | Which product category generates the most revenue and volume? | Prioritizes merchandising focus | Category, Purchase Amount (USD) | Total & average revenue by category |
+| Products | Which individual items generate the most revenue? | Identifies top-selling SKUs | Item Purchased, Purchase Amount (USD) | Revenue ranking |
+| Customer Behavior | Does subscription status correlate with higher spend or loyalty (previous purchases)? | Validates subscription program value | Subscription Status, Purchase Amount, Previous Purchases | Group averages |
+| Customer Behavior | Does discount usage correlate with a different average spend? | Tests if discounts are driving bigger baskets | Discount Applied, Purchase Amount (USD) | Group averages |
+| Time/Seasonal | Does average spend vary by season? | Informs seasonal campaign planning | Season, Purchase Amount (USD) | Average by season |
+| Geographic | Which states show the highest/lowest average purchase amount? | Flags regional opportunity, low sample caution | Location, Purchase Amount (USD) | Average by state |
+| Customer Satisfaction | Which category receives the highest customer review ratings? | Flags product/service quality gaps | Category, Review Rating | Average rating by category |
+| Operations | Which shipping types and payment methods are most used? | Informs operational/logistics priorities | Shipping Type, Payment Method | Frequency distribution |
+| Segmentation | Does purchase amount vary meaningfully by age group? | Tests age as a segmentation variable | Age, Purchase Amount (USD) | Average by age bucket |
+| Retention | Do gender or category relate to number of previous purchases (loyalty)? | Assesses loyalty patterns | Gender, Category, Previous Purchases | Average by segment |
+| Data Quality | Are `Discount Applied` and `Promo Code Used` independent signals? | Prevents double-counting in analysis | Discount Applied, Promo Code Used | Cross-tabulation |
+
+---
+
+## PART 6 — PRIORITIZED QUESTIONS
+
+### High Priority
+1. **Is the subscription program reaching all customer segments equally?** — This is the single most striking pattern in the dataset (0% female subscription vs. 39.7% male) and has direct, immediate implications for marketing strategy.
+2. **Is discount/promo usage evenly distributed across genders?** — Mirrors the subscription finding and directly affects promotional ROI and fairness of targeting.
+3. **Which category generates the most revenue and volume?** — Core merchandising input; the business needs to know where its revenue actually comes from.
+4. **Which items generate the most revenue?** — Directly actionable for inventory and marketing focus.
+5. **Does subscription status correlate with higher spend or previous purchases?** — Determines whether the subscription program is actually driving loyalty/value, which justifies (or questions) its cost.
+
+### Medium Priority
+6. Does average spend vary by season?
+7. Which category receives the highest review ratings?
+8. Does purchase amount vary by age group?
+9. Which shipping types and payment methods are most used?
+10. Does discount usage correlate with different spend levels?
+
+### Low Priority
+11. Which states show highest/lowest average purchase amount (small per-state sample, low statistical confidence).
+12. Which colors/sizes are most purchased.
+13. Do previous purchases vary by category.
+
+---
+
+## PART 7 — KPIs
+
+| KPI | Definition | Formula | Required Columns | Business Importance |
+|---|---|---|---|---|
+| Total Revenue | Sum of all purchase amounts in the dataset | SUM(Purchase Amount) | Purchase Amount (USD) | Baseline revenue figure ($233,081 across 3,900 transactions) |
+| Average Order Value (AOV) | Average spend per transaction | AVG(Purchase Amount) | Purchase Amount (USD) | Tracks typical basket size |
+| Subscription Rate | % of customers with an active subscription | COUNT(Subscription="Yes") / Total Customers | Subscription Status | Measures program reach |
+| Discount Usage Rate | % of customers who used a discount/promo | COUNT(Discount="Yes") / Total Customers | Discount Applied | Measures promo penetration |
+| Average Review Rating | Mean customer satisfaction score | AVG(Review Rating) | Review Rating | Tracks product/service satisfaction |
+| Category Revenue Share | % of total revenue from each category | SUM(Purchase Amount) per Category / Total Revenue | Category, Purchase Amount (USD) | Prioritizes merchandising focus |
+| Average Previous Purchases | Mean historical purchase count per customer | AVG(Previous Purchases) | Previous Purchases | Proxy for customer loyalty/tenure |
+| Customer Lifetime Value (true CLV) | Total historical revenue per customer over time | — | — | **Not available from the provided data** (no per-customer transaction history or dates) |
+| Purchase Frequency (actual, time-based) | Real time between purchases | — | — | **Not available from the provided data** (Frequency of Purchases is a self-reported label, not calculated from dates) |
+| Customer Acquisition Cost / Retention Rate (true) | Cost to acquire, % retained over time | — | — | **Not available from the provided data** (no cost data, no repeat-transaction timestamps) |
+
+---
+
+## PART 8 — ANALYSIS ROADMAP
+
+1. **Data Understanding** — Inventory columns, types, and structure. *(Why: establishes what questions are even answerable.)*
+2. **Data Quality Check** — Check missing values, duplicates, and redundant columns. *(Why: found Review Rating gaps and the Discount/Promo redundancy — both affect how later analysis should be interpreted.)* Visualization: missing-value summary table.
+3. **Data Cleaning** — Decide handling for 37 missing review ratings (exclude from rating averages rather than impute, since imputing would violate "do not invent data"). *(Why: keeps averages honest.)*
+4. **Exploratory Data Analysis (EDA)** — Distribution of Age, Purchase Amount, Gender, Category. *(Why: builds the customer/product profile.)* Visualization: histograms, bar charts.
+5. **KPI Calculation** — Compute Total Revenue, AOV, Subscription Rate, Discount Rate, Average Rating. *(Why: gives management-ready headline numbers.)* Visualization: KPI scorecards.
+6. **Customer Segmentation Analysis** — Gender × Subscription, Gender × Discount, Age group × Spend. *(Why: this is where the dataset's strongest pattern lives.)* Visualization: stacked bar / cross-tab heatmap.
+7. **Product/Category Analysis** — Revenue and volume by Category and Item. *(Why: informs merchandising priority.)* Visualization: bar chart ranking.
+8. **Seasonal Comparison** — Average spend by Season (not a true time trend, since there's no date field). *(Why: still useful directionally for campaign timing.)* Visualization: bar chart.
+9. **Operational Analysis** — Shipping Type and Payment Method distribution. *(Why: informs logistics/checkout investment.)* Visualization: bar chart.
+10. **Key Findings Synthesis** — Consolidate the strongest, most defensible patterns. *(Why: separates signal from noise — most numeric relationships in this dataset are weak.)*
+11. **Business Insights & Recommendations** — Translate findings into action for stakeholders.
+
+---
+
+## PART 9 — ACTUAL DATA ANALYSIS
+
+**Customer profile:** 3,900 customers, ages 18–70 (mean 44.1, median 44). Gender split is **68% male (2,652) / 32% female (1,248)** — not balanced.
+
+**Spend profile:** Purchase amounts range $20–$100 (mean $59.76, median $60). Total revenue across the dataset is **$233,081**. Spend is fairly tight and evenly distributed — there is no extreme high-spender outlier group (max is only $100).
+
+**The standout pattern — Gender vs. Subscription/Discount:**
+- **0 of 1,248 female customers (0%)** have `Subscription Status = Yes`.
+- **0 of 1,248 female customers (0%)** have `Discount Applied = Yes` or `Promo Code Used = Yes`.
+- **39.7% of male customers (1,053 of 2,652)** have an active subscription.
+- **63.2% of male customers (1,677 of 2,652)** have used a discount/promo code.
+
+This is a complete, categorical split — not a slight tendency. It is the single most important — and most unusual — finding in the dataset. It is statistically implausible for a real-world retailer to have literally zero female subscribers or discount users, so this most likely reflects **how the dataset was constructed/labeled** (a data quality / structural artifact) rather than genuine customer behavior. It is reported here as a finding either way, since it is what the data actually shows, but it should be flagged rather than assumed to be a market truth.
+
+**Category performance:** Clothing dominates by volume (1,737 transactions, 44.5% of all purchases, $104,264 revenue), followed by Accessories (1,240 transactions, $74,200), Footwear (599 transactions, $36,093), and Outerwear (324 transactions, $18,524). However, **average spend per transaction is nearly identical across categories** (Footwear $60.26, Clothing $60.03, Accessories $59.84, Outerwear $57.17) — category differences are driven by transaction volume, not by basket size.
+
+**Top revenue items:** Blouse ($10,410), Shirt ($10,332), Dress ($10,320), Pants ($10,090), Jewelry ($10,010) — the top 5 items are within 4% of each other, indicating no single dominant product.
+
+**Subscription and discount effect on spend:** Subscribers spend $59.49 on average vs. $59.87 for non-subscribers — **essentially no difference**. Customers who used a discount spent $59.28 vs. $60.13 for those who didn't — again **no meaningful difference**. Subscribers average 26.08 previous purchases vs. 25.08 for non-subscribers — a small (~1 purchase) gap that is not practically significant given the range is 1–50.
+
+**Review ratings:** Average rating is 3.75/5 overall. Category ratings are nearly flat (Footwear 3.79, Accessories 3.77, Outerwear 3.75, Clothing 3.72) — no category stands out as a satisfaction problem or strength. Ratings are identical (3.75) for subscribers and non-subscribers.
+
+**Seasonal spend:** Fall has the highest average spend ($61.56), followed by Winter ($60.36), Spring ($58.74), and Summer ($58.41) — a modest ~$3 range, not a dramatic seasonal effect.
+
+**Age groups:** Average spend by age bucket ranges narrowly from $58.88 (66+) to $60.65 (18–25) — **age shows almost no relationship with spend**.
+
+**Correlation check:** Age, Purchase Amount, Review Rating, and Previous Purchases show near-zero pairwise correlations (all |r| < 0.05). **There is no meaningful linear relationship among the numeric variables in this dataset.**
+
+**Geographic spread:** Purchases are spread almost evenly across all 50 US states (65–96 transactions per state, ~78 average) — no state dominates. Average spend by state ranges from $54.18 (Connecticut) to $67.60 (Alaska), but sample sizes per state (~60–95) are too small to draw confident regional conclusions.
+
+**Size and demographics:** Medium is the most common size across every category (45% of all purchases overall), with no notable size-preference difference by category.
+
+**Missing data pattern:** All 37 missing Review Ratings belong to male customers, concentrated somewhat more in Clothing (19 of 37). Given the small count, this is noted as a data quality observation rather than a business insight.
+
+**Payment/shipping methods:** Both are close to evenly distributed (Payment Method: PayPal 17.4%, Credit Card 17.2%, Cash 17.2%, Debit Card 16.3%, Venmo 16.3%, Bank Transfer 15.7%; Shipping Type: Free Shipping 17.3%, Standard 16.8%, Store Pickup 16.7%, Next Day Air 16.6%, Express 16.6%, 2-Day Shipping 16.1%) — customers are not concentrated on any single option.
+
+---
+
+## PART 10 — BUSINESS QUESTIONS + ACTUAL ANSWERS
+
+### Question 1
+**Business Question:** Is the subscription program reaching all customer segments equally?
+**Answer:** No. Subscription is entirely concentrated among male customers.
+**Evidence/Data:** 39.7% of male customers (1,053 of 2,652) are subscribed vs. **0% of female customers (0 of 1,248)**.
+**Business Insight:** Either the subscription program is not being marketed to, or is not resonating with, female customers at all — or this reflects a data collection/structural issue rather than true behavior.
+**Recommended Action:** Investigate the data source for this variable first (to confirm it's genuine behavior and not a labeling artifact); if genuine, audit whether subscription offers are actually being surfaced to female customers.
+
+### Question 2
+**Business Question:** Is discount/promo code usage evenly distributed across genders?
+**Answer:** No — identical pattern to subscription. 63.2% of male customers used a discount/promo code; 0% of female customers did.
+**Evidence/Data:** 1,677 of 2,652 male customers (63.2%) vs. 0 of 1,248 female customers (0%).
+**Business Insight:** Promotional spend is entirely reaching one gender segment based on this data.
+**Recommended Action:** Same as above — verify data integrity first, then review promo targeting and eligibility rules if the pattern is confirmed genuine.
+
+### Question 3
+**Business Question:** Which product category generates the most revenue and volume?
+**Answer:** Clothing leads on both dimensions.
+**Evidence/Data:** Clothing: 1,737 transactions (44.5% of volume), $104,264 revenue (44.7% of total $233,081).
+**Business Insight:** Clothing is the core revenue driver; Outerwear is the smallest at $18,524 (8% of revenue).
+**Recommended Action:** Prioritize inventory, marketing spend, and promotional real estate toward Clothing while evaluating whether Outerwear's smaller footprint is a growth opportunity or a category to right-size.
+
+### Question 4
+**Business Question:** Which items generate the most revenue?
+**Answer:** Blouse, Shirt, Dress, Pants, and Jewelry are the top 5 revenue items.
+**Evidence/Data:** Blouse $10,410; Shirt $10,332; Dress $10,320; Pants $10,090; Jewelry $10,010 — all within 4% of each other.
+**Business Insight:** Revenue is spread broadly across the catalog rather than concentrated in a "hero" product.
+**Recommended Action:** Because no single item dominates, marketing campaigns should promote category-level bundles or curated collections rather than betting on one flagship SKU.
+
+### Question 5
+**Business Question:** Does subscription status correlate with higher spend or loyalty (previous purchases)?
+**Answer:** No meaningful difference in either metric.
+**Evidence/Data:** Average spend: subscribers $59.49 vs. non-subscribers $59.87. Average previous purchases: subscribers 26.08 vs. non-subscribers 25.08.
+**Business Insight:** Based on this data, the subscription program shows no measurable lift in transaction value or loyalty.
+**Recommended Action:** Re-evaluate what the subscription program is meant to deliver (e.g., retention, referrals, engagement) since spend-per-transaction is not the benefit it provides here; consider tracking additional metrics beyond this dataset (e.g., repeat visit frequency over time) to properly assess ROI.
+
+### Question 6
+**Business Question:** Does average spend vary by season?
+**Answer:** Slightly — Fall is highest, Summer is lowest, but the range is small.
+**Evidence/Data:** Fall $61.56, Winter $60.36, Spring $58.74, Summer $58.41 — a $3.15 range.
+**Business Insight:** Season has only a marginal relationship with spend in this dataset; it is not a strong driver.
+**Recommended Action:** Don't over-invest in season-specific pricing strategy based on this signal alone; treat it as a minor input, not a primary lever.
+
+### Question 7
+**Business Question:** Which category receives the highest customer review ratings?
+**Answer:** Footwear has the (marginally) highest average rating.
+**Evidence/Data:** Footwear 3.79, Accessories 3.77, Outerwear 3.75, Clothing 3.72 — out of 5, on a 0.07-point range.
+**Business Insight:** Satisfaction is essentially uniform across categories; there is no clear underperformer.
+**Recommended Action:** No category-specific quality intervention is indicated by ratings alone; focus quality efforts elsewhere.
+
+### Question 8
+**Business Question:** Does purchase amount vary meaningfully by age group?
+**Answer:** No — spend is flat across age groups.
+**Evidence/Data:** Age-group averages range only from $58.88 (66+) to $60.65 (18–25).
+**Business Insight:** Age is not a useful variable for predicting spend level in this dataset.
+**Recommended Action:** Avoid age-based pricing or spend-tier segmentation; if age-based targeting is used, base it on other rationale (e.g., product fit), not expected basket size.
+
+### Question 9
+**Business Question:** Which shipping types and payment methods are most used?
+**Answer:** Usage is nearly evenly split across all options, with Free Shipping and PayPal marginally ahead.
+**Evidence/Data:** Free Shipping 17.3% (675 of 3,900) is the top shipping choice; PayPal 17.4% (677 of 3,900) is the top payment method — both only marginally ahead of the other 5–6 options each.
+**Business Insight:** Customers do not show a strong preference for any single shipping or payment method.
+**Recommended Action:** Maintain the full mix of options rather than consolidating; there's no data-driven case for deprecating any current shipping or payment method.
+
+### Question 10
+**Business Question:** Are `Discount Applied` and `Promo Code Used` independent signals?
+**Answer:** No — they are perfectly correlated (100% overlap).
+**Evidence/Data:** Cross-tabulation shows every "Yes" in Discount Applied matches "Yes" in Promo Code Used (1,677 records) and every "No" matches "No" (2,223 records), with zero mismatches.
+**Business Insight:** These two columns represent the same underlying event and should not be analyzed as two separate promotional signals.
+**Recommended Action:** Treat as a single "Discount/Promo Used" flag in any downstream reporting or dashboard to avoid double-counting or redundant KPIs.
+
+---
+
+## PART 11 — KEY FINDINGS
+
+**Finding 1:** Subscription (39.7% vs. 0%) and discount/promo usage (63.2% vs. 0%) are both entirely concentrated in male customers; no female customer in the dataset has either.
+**Business Meaning:** This is the dataset's most significant structural pattern, but its magnitude (a clean 0%) suggests a data artifact more than organic behavior.
+**Action:** Verify data collection/labeling before building strategy on this finding.
+
+**Finding 2:** `Discount Applied` and `Promo Code Used` are 100% redundant columns.
+**Business Meaning:** Reporting on both as separate metrics would double-count the same behavior.
+**Action:** Collapse into a single promotional-usage flag for dashboards.
+
+**Finding 3:** Clothing is the leading category by both revenue (44.7% of $233,081) and volume (44.5% of transactions).
+**Business Meaning:** Clothing is the primary revenue engine of the business.
+**Action:** Prioritize Clothing in inventory planning and marketing budget allocation.
+
+**Finding 4:** Average spend per transaction is nearly flat across category, gender, age group, and subscription status (all within a few dollars of the $59.76 overall mean).
+**Business Meaning:** Basket size is not being driven by any single demographic or product variable in this dataset.
+**Action:** Focus differentiation strategy on volume/reach (who buys, how often) rather than expecting spend-per-transaction levers from these variables.
+
+**Finding 5:** All four numeric variables (Age, Purchase Amount, Review Rating, Previous Purchases) show near-zero pairwise correlation (|r| < 0.05).
+**Business Meaning:** There is no strong linear relationship to exploit between these numeric fields — e.g., older/younger or more loyal customers do not spend measurably more.
+**Action:** Avoid building predictive spend models on these variables alone; richer behavioral or transactional-history data would be needed.
+
+**Finding 6:** No single top item dominates revenue — the top 5 items (Blouse, Shirt, Dress, Pants, Jewelry) are within 4% of one another.
+**Business Meaning:** The catalog's revenue is broad-based, not hit-driven.
+**Action:** Market curated collections/bundles rather than a single flagship product.
+
+**Finding 7:** Subscribers show no meaningful spend or rating lift over non-subscribers ($59.49 vs. $59.87 spend; 3.75 vs. 3.75 rating).
+**Business Meaning:** Based on this data alone, the subscription program is not demonstrably increasing transaction value.
+**Action:** Reassess subscription program goals/KPIs and consider tracking retention-specific metrics separately.
+
+**Finding 8:** Seasonal spend variation is modest ($58.41–$61.56, a $3.15 range) and there is no date field to validate a true time trend.
+**Business Meaning:** Season is a weak, secondary signal at best.
+**Action:** Treat seasonal campaigns as a minor optimization, not a primary strategy.
+
+**Finding 9:** Purchases are spread almost evenly across all 50 US states (65–96 per state).
+**Business Meaning:** No single region dominates demand in this dataset.
+**Action:** Maintain a national marketing approach rather than concentrating on specific states; state-level averages have too small a sample to act on individually.
+
+**Finding 10:** Medium is the most-purchased size across every category (45% of all purchases).
+**Business Meaning:** Sizing inventory should be weighted toward Medium across the board.
+**Action:** Ensure Medium stock depth is prioritized in supply planning.
+
+**Finding 11:** Missing Review Ratings (37 of 3,900, 0.95%) occur exclusively among male customers, concentrated somewhat in Clothing.
+**Business Meaning:** A small, likely non-material data gap, but worth noting for data governance.
+**Action:** Investigate why ratings are missing only for this subgroup before relying on rating completeness in downstream reports.
+
+**Finding 12:** Shipping type and payment method usage are both nearly evenly split across all 6 options each.
+**Business Meaning:** No operational consolidation is data-justified.
+**Action:** Continue supporting the full range of shipping and payment options.
+
+---
+
+## PART 12 — EXPECTED OUTCOMES
+*(Set before running the actual analysis — see Part 9 & 11 for what was actually found.)*
+
+- Understand the demographic profile of the customer base.
+- Identify which product categories and items perform best.
+- Determine whether the subscription program and discount strategy reach customers evenly.
+- Identify whether spend or satisfaction varies meaningfully by segment (gender, age, season, category).
+- Identify any data quality issues that could affect business reporting.
+- Surface any unexpected or high-impact patterns worth flagging to stakeholders.
+
+---
+
+## PART 13 — RECOMMENDATIONS
+
+| Recommendation | Data-Based Reason | Expected Business Impact | Priority |
+|---|---|---|---|
+| Audit the data source behind Subscription Status and Discount Applied before acting on the gender pattern | The 0% vs. 39.7%/63.2% split is too clean to be organic real-world behavior | Prevents building a flawed strategy on a data artifact | High |
+| If confirmed genuine, launch a female-targeted subscription and promo outreach | 0% of female customers currently have either | Potential to unlock a currently untapped ~1,248-customer segment | High |
+| Prioritize Clothing in inventory and marketing spend | Clothing = 44.7% of total revenue, largest of all categories | Protects and grows the largest revenue stream | High |
+| Consolidate `Discount Applied`/`Promo Code Used` into one reporting field | 100% redundant columns confirmed via cross-tab | Cleaner, non-duplicated promotional reporting | Medium |
+| Reassess subscription program KPIs beyond transaction spend | No spend or rating lift found for subscribers in this dataset | Ensures program investment is measured against the right outcome | Medium |
+| Maintain the full range of shipping and payment options | Usage is nearly evenly distributed across all options | Avoids losing customers who prefer a "minority" option | Medium |
+| Prioritize Medium-size stock depth across all categories | Medium is the top size in every category (45% share) | Reduces stockout risk on the most-demanded size | Medium |
+| Treat seasonal and state-level patterns as secondary, not primary, planning inputs | Seasonal range is only $3.15; state samples are too small (~60–95) for confident regional conclusions | Avoids over-investing in a weak/low-confidence signal | Low |
+
+---
+
+## PART 14 — PPT STRUCTURE (16 slides)
+
+**Slide 1 — Title**
+*Purpose:* Introduce the project. *Content:* "Customer Shopping Behavior Analysis," your name, date. *Visualization:* None. *Key Message:* Sets professional tone.
+
+**Slide 2 — Business Context**
+*Purpose:* Frame the domain. *Content:* Apparel/lifestyle e-commerce retailer; 3,900 customers; who benefits from this analysis. *Visualization:* None/icons. *Key Message:* This is a real retail decision-support project.
+
+**Slide 3 — Dataset Overview**
+*Purpose:* Show data scope. *Content:* 3,900 rows, 18 columns, no duplicates, 0.95% missing (Review Rating only), no date field. *Visualization:* Simple stat table. *Key Message:* Clean, well-scoped dataset with one clear limitation (no time dimension).
+
+**Slide 4 — Problem Statement**
+*Purpose:* State the business problem. *Content:* Part 3 text. *Visualization:* None. *Key Message:* Why this analysis is needed.
+
+**Slide 5 — Analysis Objectives**
+*Purpose:* Set expectations. *Content:* The 7 objectives from Part 4. *Visualization:* Bulleted list. *Key Message:* Structured, goal-driven approach.
+
+**Slide 6 — Key Business Questions & KPIs**
+*Purpose:* Show what will be answered and measured. *Content:* Top 5 High Priority questions (Part 6) + KPI table (Part 7). *Visualization:* Table. *Key Message:* Analysis is targeted, not exploratory noise.
+
+**Slide 7 — Analysis Methodology**
+*Purpose:* Show the workflow. *Content:* Condensed Part 8 roadmap (Data Quality → EDA → KPIs → Segmentation → Category → Findings). *Visualization:* Horizontal process diagram. *Key Message:* Rigorous, repeatable process.
+
+**Slide 8 — Customer Profile**
+*Purpose:* Who are the customers. *Content:* Age range 18–70 (mean 44), Gender split 68% M / 32% F. *Visualization:* Histogram + pie/bar chart. *Key Message:* Male-skewed customer base.
+
+**Slide 9 — Key Finding: Subscription & Discount Gap**
+*Purpose:* Present the standout finding. *Content:* 39.7%/63.2% male vs. 0%/0% female (subscription/discount), with the data-quality caveat. *Visualization:* Side-by-side bar chart. *Key Message:* Most striking — and most requiring validation — pattern in the data.
+
+**Slide 10 — Category & Product Performance**
+*Purpose:* Merchandising view. *Content:* Category revenue split (Clothing 44.7%, Accessories 31.8%, Footwear 15.5%, Outerwear 7.9%), top 5 items. *Visualization:* Bar chart + top-5 table. *Key Message:* Clothing drives revenue; no single hero product.
+
+**Slide 11 — Spend Consistency Across Segments**
+*Purpose:* Show what does NOT vary. *Content:* Avg spend flat across category, gender, age group, subscription status. *Visualization:* Grouped bar chart. *Key Message:* Basket size isn't segment-driven — a deliberately honest, data-backed slide.
+
+**Slide 12 — Seasonal & Satisfaction Patterns**
+*Purpose:* Secondary signals. *Content:* Seasonal spend range ($58.41–$61.56), category ratings (3.72–3.79). *Visualization:* Two small bar charts. *Key Message:* Both are mild signals, not major levers.
+
+**Slide 13 — Operational Patterns**
+*Purpose:* Ops view. *Content:* Shipping type & payment method distribution (both near-even). *Visualization:* Two donut/bar charts. *Key Message:* No operational consolidation justified by data.
+
+**Slide 14 — Data Quality Notes**
+*Purpose:* Transparency. *Content:* Discount/Promo redundancy, 0.95% missing ratings (male-only), 0% female subscription/discount as a flagged artifact. *Visualization:* Simple callout box. *Key Message:* Analytical honesty and rigor.
+
+**Slide 15 — Key Insights & Recommendations**
+*Purpose:* Synthesize. *Content:* Top findings + priority-tagged recommendations (Part 13). *Visualization:* Table. *Key Message:* Clear, actionable next steps.
+
+**Slide 16 — Conclusion / Executive Summary**
+*Purpose:* Close the story. *Content:* Part 15 executive summary. *Visualization:* None. *Key Message:* Recap the business value delivered.
+
+---
+
+## PART 15 — FINAL EXECUTIVE SUMMARY
+
+### Business Problem
+The business lacked a consolidated, data-backed view of how customer demographics, product categories, and promotional activity relate to purchasing behavior across its 3,900-customer base.
+
+### Objective
+Profile the customer base, evaluate category/product performance, and assess how subscription and discount programs are distributed and whether they correlate with higher spend or loyalty.
+
+### Top 5 Findings
+1. Subscription (39.7%) and discount/promo usage (63.2%) are found exclusively among male customers — 0% of female customers have either, a pattern significant enough to warrant a data-integrity check before acting on it.
+2. `Discount Applied` and `Promo Code Used` are 100% redundant fields representing the same event.
+3. Clothing is the leading category, generating 44.7% of total revenue ($104,264 of $233,081) and 44.5% of transaction volume.
+4. Average spend per transaction ($59.76 overall) is remarkably flat across category, gender, age group, and subscription status — no segment shows a meaningfully higher basket size.
+5. Subscribers show no measurable spend or satisfaction advantage over non-subscribers, raising questions about the subscription program's current effectiveness.
+
+### Top 5 Business Recommendations
+1. Audit the data pipeline behind Subscription Status and Discount Applied before building strategy on the gender split.
+2. If confirmed genuine, target female customers with subscription and promo outreach — a currently 0%-penetrated segment of 1,248 customers.
+3. Prioritize Clothing in inventory and marketing investment as the largest revenue driver.
+4. Consolidate discount/promo reporting into a single field to avoid duplicated metrics.
+5. Re-scope subscription program KPIs, since transaction spend is not the value it currently demonstrates.
+
+### Overall Conclusion
+This dataset offers a clean, well-structured snapshot of 3,900 retail transactions with strong category and demographic detail, but very limited numeric relationships — Age, Spend, Rating, and Loyalty are essentially uncorrelated, and there is no date field to support true time-trend analysis. Its most actionable output is not a subtle statistical trend but a stark, verifiable structural pattern (gender vs. subscription/discount) that deserves validation before being treated as a market truth, alongside a clear, well-supported picture of Clothing as the business's primary revenue driver.
+
+---
+
+## APPENDIX — Data Quality Summary
+
+| Check | Result |
+|---|---|
+| Total rows | 3,900 |
+| Total columns | 18 |
+| Duplicate rows | 0 |
+| Duplicate Customer IDs | 0 |
+| Missing values | 37 (Review Rating only, 0.95%), all other columns 100% complete |
+| Redundant columns | Discount Applied ≡ Promo Code Used (100% overlap) |
+| Date/time field | None present |
+| Total revenue | $233,081 |
+| Average order value | $59.76 |
+| Overall average review rating | 3.75 / 5 |
